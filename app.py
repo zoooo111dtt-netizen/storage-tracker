@@ -65,7 +65,8 @@ with tab_checkin:
     with st.form("checkin_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            name = st.selectbox("打卡人", ["我", "我朋友", "神秘嘉宾"])
+            # 优化：由选择框改为自由文本输入，支持任意名字和人数
+            name = st.text_input("打卡人", placeholder="请输入你的名字/昵称", max_chars=15)
             device = st.selectbox("清理设备", ["手机", "平板", "电脑", "其他"])
         with col2:
             clean_value = st.number_input("清理大小", min_value=0.01, max_value=2048.0, value=1.0, step=0.1)
@@ -81,28 +82,32 @@ with tab_checkin:
         submit_btn = st.form_submit_button("🚀 提交今日打卡")
         
     if submit_btn:
-        # 单位换算为GB
-        size_in_gb = clean_value if unit == "GB" else clean_value / 1024.0
-        today = datetime.date.today()
-        
-        # 格式化清理类型
-        type_str = ", ".join(clean_type) if clean_type else "日常清理"
-        
-        new_record = {
-            "日期": today,
-            "打卡人": name,
-            "清理设备": device,
-            "清理大小(GB)": round(size_in_gb, 4),
-            "清理类型": type_str,
-            "打卡心得": comment if comment else "坚持打卡！"
-        }
-        
-        df = pd.concat([df, pd.DataFrame([new_record])], ignore_index=True)
-        save_data(df)
-        st.success(f"🎉 打卡成功！{name} 今天成功拯救了 {clean_value} {unit} 的空间！")
-        st.balloons()
-        # 重新加载以更新图表
-        st.rerun()
+        # 校验：名字不能为空
+        if not name.strip():
+            st.error("⚠️ 请输入打卡人名字后再提交！")
+        else:
+            # 单位换算为GB
+            size_in_gb = clean_value if unit == "GB" else clean_value / 1024.0
+            today = datetime.date.today()
+            
+            # 格式化清理类型
+            type_str = ", ".join(clean_type) if clean_type else "日常清理"
+            
+            new_record = {
+                "日期": today,
+                "打卡人": name.strip(),
+                "清理设备": device,
+                "清理大小(GB)": round(size_in_gb, 4),
+                "清理类型": type_str,
+                "打卡心得": comment if comment else "坚持打卡！"
+            }
+            
+            df = pd.concat([df, pd.DataFrame([new_record])], ignore_index=True)
+            save_data(df)
+            st.success(f"🎉 打卡成功！{name.strip()} 今天成功拯救了 {clean_value} {unit} 的空间！")
+            st.balloons()
+            # 重新加载以更新图表
+            st.rerun()
 
 # ---- 标签页 2：统计看板 ----
 with tab_dashboard:
