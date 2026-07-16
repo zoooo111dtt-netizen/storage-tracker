@@ -21,10 +21,15 @@ def load_data():
         try:
             df = pd.read_csv(DATA_FILE)
             df['日期'] = pd.to_datetime(df['日期']).dt.date
+            # 确保有“删除密码”列
+            if "删除密码" not in df.columns:
+                df["删除密码"] = ""
+            # 填充空密码
+            df["删除密码"] = df["删除密码"].fillna("").astype(str)
             return df
         except Exception:
             pass
-    return pd.DataFrame(columns=["日期", "打卡人", "清理设备", "清理大小(GB)", "清理类型", "打卡心得"])
+    return pd.DataFrame(columns=["日期", "打卡人", "清理设备", "清理大小(GB)", "清理类型", "打卡心得", "删除密码"])
 
 # 保存数据
 def save_data(df):
@@ -65,7 +70,6 @@ with tab_checkin:
     with st.form("checkin_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            # 优化：由选择框改为自由文本输入，支持任意名字和人数
             name = st.text_input("打卡人", placeholder="请输入你的名字/昵称", max_chars=15)
             device = st.selectbox("清理设备", ["手机", "平板", "电脑", "其他"])
         with col2:
@@ -79,12 +83,17 @@ with tab_checkin:
         
         comment = st.text_area("打卡心得 / 吐槽", placeholder="今天删了2000张过期的表情包，神清气爽！", max_chars=150)
         
+        # 新增：删除密码设置
+        del_pwd = st.text_input("设置删除密码 (必填，用于以后自助删除错误记录)", type="password", max_chars=20, help="如果以后发现这条记录记错了，需要凭此密码删除。")
+        
         submit_btn = st.form_submit_button("🚀 提交今日打卡")
         
     if submit_btn:
-        # 校验：名字不能为空
+        # 校验
         if not name.strip():
             st.error("⚠️ 请输入打卡人名字后再提交！")
+        elif not del_pwd.strip():
+            st.error("⚠️ 为了防止别人误删你的记录，请务必设置一个“删除密码”！")
         else:
             # 单位换算为GB
             size_in_gb = clean_value if unit == "GB" else clean_value / 1024.0
@@ -99,7 +108,8 @@ with tab_checkin:
                 "清理设备": device,
                 "清理大小(GB)": round(size_in_gb, 4),
                 "清理类型": type_str,
-                "打卡心得": comment if comment else "坚持打卡！"
+                "打卡心得": comment if comment else "坚持打卡！",
+                "删除密码": del_pwd.strip()
             }
             
             df = pd.concat([df, pd.DataFrame([new_record])], ignore_index=True)
@@ -153,14 +163,61 @@ with tab_dashboard:
 with tab_history:
     st.subheader("📋 历史打卡明细")
     if not df.empty:
+        # 在前端展示时，把“删除密码”这一列隐藏，防止密码泄露
+        display_df = df.copy()
+        if "删除密码" in display_df.columns:
+            display_df = display_df.drop(columns=["删除密码"])
+            
         # 倒序显示，最新打卡的在最上面
         st.dataframe(
-            df.sort_values(by="日期", ascending=False),
+            display_df.sort_values(by="日期", ascending=False),
             use_container_width=True,
             column_config={
                 "清理大小(GB)": st.column_config.NumberColumn(format="%.3f GB")
             }
         )
+        
+        st.divider()
+        
+        # ---- 新增：自主删除错误记录功能 ----
+        st.subheader("⚠️ 删除错误记录")
+        st.write("如果你不小心记错了，可以在下方自主删除你自己的记录：")
+        
+        # 给每条记录生成一个唯一的展示标签 (带上索引，方便准确定位)
+        record_options = []
+        for idx, row in df.iterrows():
+            record_options.append(f"【ID: {idx}】 {row['日期']} - {row['打卡人']} 清理了 {row['清理大小(GB)']:.3f} GB")
+            
+        selected_record_str = st.selectbox("选择要删除的记录", record_options)
+        
+        if selected_record_str:
+            # 解析出选中的行索引 (idx)
+            selected_idx = int(selected_record_str.split("【ID: ")[1].split("】")[0])
+            target_row = df.loc[selected_idx]
+            
+            col_del1, col_del2 = st.columns(2)
+            with col_del1:
+                input_name = st.text_input("请输入打卡人姓名以验证", placeholder="必须与记录中的名字一致", key="del_name")
+            with col_del2:
+                input_pwd = st.text_input("请输入该条记录的删除密码", type="password", key="del_pwd")
+                
+            if st.button("❌ 确认删除这条记录", type="primary"):
+                # 校验名字 and 密码
+                correct_name = str(target_row["打卡人"]).strip()
+                correct_pwd = str(target_row["删除密码"]).strip()
+                
+                if input_name.strip() != correct_name:
+                    st.error("❌ 验证失败：输入的打卡人名字不正确！")
+                elif input_pwd.strip() != correct_pwd:
+                    st.error("❌ 验证失败：删除密码不正确！")
+                else:
+                    # 执行删除
+                    df = df.drop(selected_idx).reset_index(drop=True)
+                    save_data(df)
+                    st.success("🎉 记录删除成功！正在刷新网页...")
+                    st.rerun()
+        
+        st.divider()
         
         # 提供CSV下载
         csv_data = df.to_csv(index=False).encode('utf-8')
