@@ -25,12 +25,21 @@ def load_data():
     if os.path.exists(DATA_FILE):
         try:
             df = pd.read_csv(DATA_FILE)
-            if "日期" in df.columns:
-                df["日期"] = pd.to_datetime(df["日期"]).dt.date
+            
             # 确保老数据结构兼容
             for col in ["ID", "删除密码", "公开属性"]:
                 if col not in df.columns:
                     df[col] = ""
+                    
+            # 强制转换释放空间为数值类型，无法转换的转为NaN并填充为0
+            if "释放空间(GB)" in df.columns:
+                df["释放空间(GB)"] = pd.to_numeric(df["释放空间(GB)"], errors='coerce').fillna(0.0)
+                
+            if "日期" in df.columns:
+                df["日期"] = pd.to_datetime(df["日期"]).dt.date
+                
+            df["删除密码"] = df["删除密码"].fillna("").astype(str)
+            df["公开属性"] = df["公开属性"].fillna("公开").astype(str)
             return df
         except Exception:
             pass
@@ -164,10 +173,13 @@ with tab2:
     st.subheader("📊 数据洞察")
 
     if not df.empty:
-        # 将日期转换为纯 YYYY-MM-DD 字符串格式，彻底规避小时显示
         trend = df.copy()
-        trend["日期显示"] = trend["日期"].apply(lambda x: x.strftime('%Y-%m-%d') if hasattr(x, 'strftime') else str(x))
+        # 确保日期列已被正确解析，并转化为标准的 YYYY-MM-DD 纯文本，彻底解决小时和空白问题
+        trend["日期显示"] = pd.to_datetime(trend["日期"]).dt.strftime('%Y-%m-%d')
+        
+        # 聚合每日数据，并根据日期字符串排序，防止画线顺序错乱
         trend_grouped = trend.groupby(["日期显示", "打卡人"])["释放空间(GB)"].sum().reset_index()
+        trend_grouped = trend_grouped.sort_values(by="日期显示")
 
         fig = px.line(
             trend_grouped,
@@ -175,10 +187,11 @@ with tab2:
             y="释放空间(GB)",
             color="打卡人",
             markers=True,
-            title="每日释放趋势"
+            title="每日释放趋势",
+            labels={"日期显示": "打卡日期", "释放空间(GB)": "释放空间 (GB)"}
         )
-        # 强制 x 轴刻度作为分类（即纯文本格式展示），不会自动补全时分秒
-        fig.update_xaxes(type='category', title_text="打卡日期")
+        # 让横坐标作为分类轴完美展示每个有打卡的日期
+        fig.update_layout(xaxis_type='category')
         st.plotly_chart(fig, use_container_width=True)
 
         col1, col2 = st.columns(2)
