@@ -414,9 +414,17 @@ with tab4:
             target_id = record_map[selected_label]
             
             if st.button("❌ 确认执行物理删除", type="primary"):
+                # 1. 过滤掉目标 ID 达成删除
                 df = df[df["ID"] != target_id].reset_index(drop=True)
+                
+                # 2. 写入文件并清除 load_data 缓存
                 save_data(df)
-                st.success("🎉 数据销毁成功，正在更新...")
+                
+                # 💡 核心修复：手动销毁或重置 session 中的长度锚点，迫使顶部重新跑预计算
+                if "last_data_len" in st.session_state:
+                    del st.session_state["last_data_len"]
+                
+                st.success("🎉 数据销毁成功，正在更新视图...")
                 st.rerun()
         else:
             st.error("❌ 身份校验失败：未找到对应的打卡账号，或安全密码不匹配。")
