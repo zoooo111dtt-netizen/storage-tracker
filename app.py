@@ -257,7 +257,7 @@ with tab2:
         fig.update_layout(xaxis_type='category')
         st.plotly_chart(fig, use_container_width=True)
 
-        # 第一行图表：清理设备比例 & 累计释放柱状图
+        # 第一行图表：清理设备比例 & 每日释放对比柱状图
         col1, col2 = st.columns(2)
         with col1:
             device_df = df.groupby("清理设备")["释放空间(GB)"].sum().reset_index()
@@ -265,16 +265,24 @@ with tab2:
             st.plotly_chart(fig, use_container_width=True)
             
         with col2:
-            # ⑦ 更直观的累计释放柱状图
-            people_df = df.groupby("打卡人")["释放空间(GB)"].sum().reset_index().sort_values(by="释放空间(GB)", ascending=True)
-            fig_bar = px.bar(people_df, x="释放空间(GB)", y="打卡人", orientation='h', title="成员历史累计释放空间 (GB)",
-                             color="打卡人", color_discrete_sequence=px.colors.qualitative.Set3)
+            # 📊 修改后：每日释放对比柱状图（簇状柱形图，展现每天各成员的较量）
+            fig_bar = px.bar(
+                trend_grouped, 
+                x="日期显示", 
+                y="释放空间(GB)", 
+                color="打卡人", 
+                barmode="group", # 柱子并排显示
+                title="每日释放空间对比柱状图 (GB)",
+                color_discrete_sequence=px.colors.qualitative.Set3,
+                labels={"日期显示": "打卡日期", "释放空间(GB)": "释放空间 (GB)"}
+            )
+            fig_bar.update_layout(xaxis_type='category')
             st.plotly_chart(fig_bar, use_container_width=True)
 
         # 第二行图表：创造空间价值的饼图 & 成员贡献比例
         col3, col4 = st.columns(2)
         with col3:
-            # 💰 重新加回来的创造价值饼图
+            # 💰 创造价值饼图
             value_df = df.copy()
             value_df["价值"] = value_df["释放空间(GB)"] * STORAGE_VALUE_PER_GB
             value_grouped = value_df.groupby("打卡人")["价值"].sum().reset_index()
@@ -289,6 +297,7 @@ with tab2:
 
         with col4:
             # 成员贡献比例（空间大小）
+            people_df = df.groupby("打卡人")["释放空间(GB)"].sum().reset_index()
             fig_contrib = px.pie(
                 people_df,
                 names="打卡人",
