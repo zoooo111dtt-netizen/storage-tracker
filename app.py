@@ -32,12 +32,12 @@ def format_storage(gb):
 
 # 勋章与称号配置
 MEDALS = [
-    {"limit": 0, "title": "🌱 数字空间探索者"},
-    {"limit": 1, "title": "🟢 空间整理进阶者"},
-    {"limit": 10, "title": "🔵 缓存清理领导者"},
-    {"limit": 30, "title": "🟣 数字秩序维护者"},
-    {"limit": 60, "title": "🟠 数字极简践行者"},
-    {"limit": 100, "title": "👑 Digital Clean Legend"}
+    {"limit": 0, "title": "🌱 数字空间探索者"},
+    {"limit": 1, "title": "🟢 空间整理进阶者"},
+    {"limit": 10, "title": "🔵 缓存清理领导者"},
+    {"limit": 30, "title": "🟣 数字秩序维护者"},
+    {"limit": 60, "title": "🟠 数字极简践行者"},
+    {"limit": 100, "title": "👑 Digital Clean Legend"}
 ]
 
 def get_medal_info(gb):
@@ -125,7 +125,7 @@ if "last_data_len" not in st.session_state or st.session_state.last_data_len != 
         people_agg = df_calc.groupby("打卡人")["释放空间(GB)"].sum().reset_index()
         st.session_state.rank_all = people_agg.sort_values(by="释放空间(GB)", ascending=False)
         st.session_state.rank_week = this_week_users.groupby("打卡人")["释放空间(GB)"].sum().reset_index().sort_values(by="释放空间(GB)", ascending=False) if not this_week_users.empty else pd.DataFrame()
-        st.session_state.rank_month = this_month_users.groupby("打卡人")["释放空间(GB)"].sum().reset_index().sort_values(by="释放空间(GB)", ascending=False) if not this_month_users.empty else pd.DataFrame()
+        st.session_state.rank_month = this_month_users.groupby("打卡人")["释放空間(GB)"].sum().reset_index().sort_values(by="释放空间(GB)", ascending=False) if not this_month_users.empty else pd.DataFrame()
         
         # 3. 图表数据源预处理
         trend_grouped = df_calc.groupby(["日期显示", "打卡人"])["释放空间(GB)"].sum().reset_index().sort_values(by="日期显示")
