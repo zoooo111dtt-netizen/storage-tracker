@@ -20,7 +20,7 @@ STORAGE_VALUE_PER_GB = 0.6
 def pwd_hash(p):
     return hashlib.sha256(p.encode("utf-8")).hexdigest()
 
-# ③ 智能单位换算器
+# 智能单位换算器
 def format_storage(gb):
     if gb < 0.001:
         return "0 MB"
@@ -30,72 +30,59 @@ def format_storage(gb):
         return f"{gb:.2f} GB"
     return f"{gb/1024:.2f} TB"
 
-# ⑤ 勋章与称号配置
+# 勋章与称号配置
 MEDALS = [
     {"limit": 0, "title": "🌱 数字空间探索者"},
-    {"limit": 1, "title": "🟢 空间整理进阶者"},
-    {"limit": 10, "title": "🔵 缓存清理领导者"},
-    {"limit": 30, "title": "🟣 数字秩序维护者"},
-    {"limit": 60, "title": "🟠 数字极简践行者"},
-    {"limit": 100, "title": "👑 Digital Clean Legend"}
+    {"limit": 1, "title": "🟢 空间整理进阶者"},
+    {"limit": 10, "title": "🔵 缓存清理领导者"},
+    {"limit": 30, "title": "🟣 数字秩序维护者"},
+    {"limit": 60, "title": "🟠 数字极简践行者"},
+    {"limit": 100, "title": "👑 Digital Clean Legend"}
 ]
 
 def get_medal_info(gb):
     current_title = MEDALS[0]["title"]
     next_title = "已封顶"
     remaining = 0.0
-    
     for item in MEDALS:
         if gb >= item["limit"]:
             current_title = item["title"]
-    
     for item in MEDALS:
         if item["limit"] > gb:
             next_title = item["title"]
             remaining = item["limit"] - gb
             break
-            
     return current_title, next_title, remaining
 
-# ① 精准缓存：数据加载缓存
+# 数据加载缓存
 @st.cache_data
 def load_data():
     if os.path.exists(DATA_FILE):
         try:
             df = pd.read_csv(DATA_FILE)
-            
             if "释放空间(GB)" not in df.columns and "清理大小(GB)" in df.columns:
                 df["释放空间(GB)"] = df["清理大小(GB)"]
             if "整理内容" not in df.columns and "清理类型" in df.columns:
                 df["整理内容"] = df["清理类型"]
             if "断舍离心得" not in df.columns and "打卡心得" in df.columns:
                 df["断舍离心得"] = df["打卡心得"]
-                
             for col in ["ID", "删除密码", "公开属性"]:
                 if col not in df.columns:
                     df[col] = ""
-                    
             if "释放空间(GB)" in df.columns:
                 df["释放空间(GB)"] = pd.to_numeric(df["释放空间(GB)"], errors='coerce').fillna(0.0)
-                
             if "日期" in df.columns:
                 df["日期"] = pd.to_datetime(df["日期"]).dt.date
-                
             df["删除密码"] = df["删除密码"].fillna("").astype(str)
             df["公开属性"] = df["公开属性"].fillna("公开").astype(str)
             return df
         except Exception:
             pass
-
-    return pd.DataFrame(columns=[
-        "ID", "日期", "打卡人", "清理设备",
-        "释放空间(GB)", "整理内容",
-        "断舍离心得", "删除密码", "公开属性"
-    ])
+    return pd.DataFrame(columns=["ID", "日期", "打卡人", "清理设备", "释放空间(GB)", "整理内容", "断舍离心得", "删除密码", "公开属性"])
 
 def save_data(df):
     df.to_csv(DATA_FILE, index=False, encoding="utf-8-sig")
-    load_data.clear()  # ① 只清除该函数的缓存，不影响全局系统
+    load_data.clear()
 
 def streak(df, name):
     user_df = df[df["打卡人"] == name]
@@ -104,10 +91,8 @@ def streak(df, name):
     dates = sorted(list(set(user_df["日期"].tolist())))
     today = datetime.date.today()
     yesterday = today - datetime.timedelta(days=1)
-    
     if dates[-1] != today and dates[-1] != yesterday:
         return 0
-        
     s = 1
     for i in range(len(dates)-1, 0, -1):
         if (dates[i] - dates[i-1]).days == 1:
@@ -119,57 +104,59 @@ def streak(df, name):
 # 📥 加载核心原始数据
 df = load_data()
 
-# ⑥ & ⑧ 统一集中计算与 Session 缓存机制（干掉重复 groupby 和 copy）
+# 🚀 极致优化：把预聚合数据和【Plotly 图表对象】全部锁死在 Session 状态里，数据不变绝不重新 render
 if "last_data_len" not in st.session_state or st.session_state.last_data_len != len(df):
     st.session_state.last_data_len = len(df)
     
     if not df.empty:
-        # 1. 基础总览数据缓存
+        # 1. 基础看板指标
         st.session_state.total_gb = df["释放空间(GB)"].sum()
         st.session_state.people_count = df["打卡人"].nunique()
         
-        # 2. 周期排行聚合数据缓存
+        # 2. 排行榜计算
         today_dt = datetime.datetime.now()
-        df_calc = df.copy()  # 仅在此处做一次格式转换
+        df_calc = df.copy()
         df_calc["日期_dt"] = pd.to_datetime(df_calc["日期"])
         df_calc["日期显示"] = df_calc["日期_dt"].dt.strftime('%Y-%m-%d')
         
         this_week_users = df_calc[df_calc["日期_dt"].dt.isocalendar().week == today_dt.isocalendar()[1]]
         this_month_users = df_calc[df_calc["日期_dt"].dt.month == today_dt.month]
         
-        # 成员与空间的聚合（多次复用的基础数据）
         people_agg = df_calc.groupby("打卡人")["释放空间(GB)"].sum().reset_index()
-        st.session_state.people_agg = people_agg
         st.session_state.rank_all = people_agg.sort_values(by="释放空间(GB)", ascending=False)
+        st.session_state.rank_week = this_week_users.groupby("打卡人")["释放空间(GB)"].sum().reset_index().sort_values(by="释放空间(GB)", ascending=False) if not this_week_users.empty else pd.DataFrame()
+        st.session_state.rank_month = this_month_users.groupby("打卡人")["释放空间(GB)"].sum().reset_index().sort_values(by="释放空间(GB)", ascending=False) if not this_month_users.empty else pd.DataFrame()
         
-        if not this_week_users.empty:
-            st.session_state.rank_week = this_week_users.groupby("打卡人")["释放空间(GB)"].sum().reset_index().sort_values(by="释放空间(GB)", ascending=False)
-        else:
-            st.session_state.rank_week = pd.DataFrame()
-            
-        if not this_month_users.empty:
-            st.session_state.rank_month = this_month_users.groupby("打卡人")["释放空间(GB)"].sum().reset_index().sort_values(by="释放空间(GB)", ascending=False)
-        else:
-            st.session_state.rank_month = pd.DataFrame()
-            
-        # 3. 趋势图数据预聚合
-        st.session_state.trend_grouped = df_calc.groupby(["日期显示", "打卡人"])["释放空间(GB)"].sum().reset_index().sort_values(by="日期显示")
-        st.session_state.device_df = df_calc.groupby("清理设备")["释放空间(GB)"].sum().reset_index()
-        
-        # 4. 价值数据聚合
+        # 3. 图表数据源预处理
+        trend_grouped = df_calc.groupby(["日期显示", "打卡人"])["释放空间(GB)"].sum().reset_index().sort_values(by="日期显示")
+        device_df = df_calc.groupby("清理设备")["释放空间(GB)"].sum().reset_index()
         value_df = people_agg.copy()
         value_df["价值"] = value_df["释放空间(GB)"] * STORAGE_VALUE_PER_GB
-        st.session_state.value_grouped = value_df
+        
+        # 4. 🔥 核心提速点：把生成的 Plotly 图表对象直接缓存在内存中！
+        fig_trend = px.line(trend_grouped, x="日期显示", y="释放空间(GB)", color="打卡人", markers=True, title="每日释放趋势")
+        fig_trend.update_layout(xaxis_type='category')
+        st.session_state.fig_trend = fig_trend
+        
+        st.session_state.fig_pie = px.pie(device_df, names="清理设备", values="释放空间(GB)", title="设备整理比例", color_discrete_sequence=px.colors.qualitative.Pastel)
+        
+        fig_bar = px.bar(trend_grouped, x="日期显示", y="释放空间(GB)", color="打卡人", barmode="group", title="每日释放空间对比柱状图 (GB)", color_discrete_sequence=px.colors.qualitative.Set3, labels={"日期显示": "打卡日期", "释放空间(GB)": "释放空间 (GB)"})
+        fig_bar.update_layout(xaxis_type='category')
+        st.session_state.fig_bar = fig_bar
+        
+        st.session_state.fig_val = px.pie(value_df, names="打卡人", values="价值", title="成员创造空间价值比例 (元)", color_discrete_sequence=px.colors.qualitative.Bold)
+        st.session_state.fig_contrib = px.pie(people_agg, names="打卡人", values="释放空间(GB)", title="成员空间贡献比例 (GB)", color_discrete_sequence=px.colors.qualitative.Set3)
     else:
         st.session_state.total_gb = 0.0
         st.session_state.people_count = 0
         st.session_state.rank_all = pd.DataFrame()
         st.session_state.rank_week = pd.DataFrame()
         st.session_state.rank_month = pd.DataFrame()
-        st.session_state.trend_grouped = pd.DataFrame()
-        st.session_state.device_df = pd.DataFrame()
-        st.session_state.value_grouped = pd.DataFrame()
-        st.session_state.people_agg = pd.DataFrame()
+        st.session_state.fig_trend = None
+        st.session_state.fig_pie = None
+        st.session_state.fig_bar = None
+        st.session_state.fig_val = None
+        st.session_state.fig_contrib = None
 
 # UI 样式
 st.markdown("""
@@ -183,7 +170,7 @@ st.markdown("""
 st.title("🧹 数字断舍离")
 st.caption("Digital Clean · 每一次整理，都是一次与数字空间的告别与重生，让冗余消散，让空间重新呼吸")
 
-# 首页看板展示（直接读取 Session，极速渲染）
+# 看板渲染（纯内存读取，0延迟）
 c1, c2, c3 = st.columns(3)
 with c1:
     st.markdown(f'<div class="card"><div>💾 累计释放空间</div><div class="big">{format_storage(st.session_state.total_gb)}</div></div>', unsafe_allow_html=True)
@@ -203,13 +190,11 @@ with tab1:
             name = st.text_input("打卡人", placeholder="请输入你的名字/昵称")
         with col_device:
             device = st.selectbox("设备", ["手机", "平板", "电脑", "其他"])
-            
         col_size, col_unit = st.columns([3, 1])
         with col_size:
             size_val = st.number_input("释放空间", min_value=0.01, value=1.0, step=0.1)
         with col_unit:
             unit = st.selectbox("单位", ["GB", "MB"])
-            
         types = st.multiselect("整理内容", ["📷照片", "🎬视频", "💬聊天缓存", "🗑系统垃圾", "📦APP整理", "📄文件"])
         note = st.text_area("断舍离心得")
         pwd = st.text_input("删除/查看密码（必填）", type="password")
@@ -230,25 +215,18 @@ with tab1:
             df = pd.concat([df, new], ignore_index=True)
             save_data(df)
             
+            if "last_data_len" in st.session_state:
+                del st.session_state["last_data_len"]
+            
             current_streak = streak(df, name.strip())
             user_total = df[df["打卡人"] == name.strip()]["释放空间(GB)"].sum()
-            
             st.success(f"🎉 🧹 断舍离成功记录！")
-            c_eff1, c_eff2, c_eff3 = st.columns(3)
-            with c_eff1:
-                st.info(f"🔥 已连续打卡: **{current_streak}** 天")
-            with c_eff2:
-                st.info(f"📦 本次释放: **{format_storage(size_in_gb)}**")
-            with c_eff3:
-                st.info(f"💰 累计贡献: **{format_storage(user_total)}** (价值 ¥{user_total*STORAGE_VALUE_PER_GB:.2f})")
-            st.balloons()
             st.rerun()
 
-# ---- Tab 2: 数据洞察与排行榜 ----
+# ---- Tab 2: 数据洞察与排行榜（秒开） ----
 with tab2:
     if not df.empty:
         st.subheader("🏆 数字断舍离大奖赛")
-        
         r_c1, r_c2, r_c3 = st.columns(3)
         with r_c1:
             st.markdown("<h5 style='text-align:center;'>🥇 总榜总冠军</h5>", unsafe_allow_html=True)
@@ -268,14 +246,12 @@ with tab2:
                 st.markdown('<div class="rank-box" style="background:#F2F2F2; color:#8C8C8C;">本月暂无打卡</div>', unsafe_allow_html=True)
                 
         st.divider()
-        
         st.subheader("🏅 玩家成就勋章查询")
         all_unique_users = sorted(list(df["打卡人"].dropna().unique()))
         query_name = st.selectbox("选择要查看的玩家", all_unique_users, key="medal_user_select")
         if query_name:
             user_space = df[df["打卡人"] == query_name]["释放空间(GB)"].sum()
             c_title, n_title, rem_gb = get_medal_info(user_space)
-            
             mc1, mc2 = st.columns([1, 2])
             with mc1:
                 st.metric("当前最高称号", c_title)
@@ -286,53 +262,21 @@ with tab2:
                     st.success("🎉 恭喜！你已达到数字极简的最高荣誉殿堂！")
                     
         st.divider()
-
-        # ③ 图表缓存：利用已经从预计算拿到结果的聚合对象绘图，完全消除函数重绘耗时
         st.subheader("📊 空间趋势与多维图表")
         
-        fig = px.line(st.session_state.trend_grouped, x="日期显示", y="释放空间(GB)", color="打卡人", markers=True, title="每日释放趋势")
-        fig.update_layout(xaxis_type='category')
-        st.plotly_chart(fig, use_container_width=True)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            fig = px.pie(st.session_state.device_df, names="清理设备", values="释放空间(GB)", title="设备整理比例", color_discrete_sequence=px.colors.qualitative.Pastel)
-            st.plotly_chart(fig, use_container_width=True)
-            
-        with col2:
-            fig_bar = px.bar(
-                st.session_state.trend_grouped, 
-                x="日期显示", 
-                y="释放空间(GB)", 
-                color="打卡人", 
-                barmode="group",
-                title="每日释放空间对比柱状图 (GB)",
-                color_discrete_sequence=px.colors.qualitative.Set3,
-                labels={"日期显示": "打卡日期", "释放空间(GB)": "释放空间 (GB)"}
-            )
-            fig_bar.update_layout(xaxis_type='category')
-            st.plotly_chart(fig_bar, use_container_width=True)
-
-        col3, col4 = st.columns(2)
-        with col3:
-            fig_val = px.pie(
-                st.session_state.value_grouped,
-                names="打卡人",
-                values="价值",
-                title="成员创造空间价值比例 (元)",
-                color_discrete_sequence=px.colors.qualitative.Bold
-            )
-            st.plotly_chart(fig_val, use_container_width=True)
-
-        with col4:
-            fig_contrib = px.pie(
-                st.session_state.people_agg,
-                names="打卡人",
-                values="释放空间(GB)",
-                title="成员空间贡献比例 (GB)",
-                color_discrete_sequence=px.colors.qualitative.Set3
-            )
-            st.plotly_chart(fig_contrib, use_container_width=True)
+        # 💡 从 Session 缓存中直接吐出绘好的图表对象，省去 99% 的重绘计算时间
+        if st.session_state.fig_trend:
+            st.plotly_chart(st.session_state.fig_trend, use_container_width=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.plotly_chart(st.session_state.fig_pie, use_container_width=True)
+            with col2:
+                st.plotly_chart(st.session_state.fig_bar, use_container_width=True)
+            col3, col4 = st.columns(2)
+            with col3:
+                st.plotly_chart(st.session_state.fig_val, use_container_width=True)
+            with col4:
+                st.plotly_chart(st.session_state.fig_contrib, use_container_width=True)
     else:
         st.info("暂无数据，打卡后即可查看图表看板。")
 
@@ -352,11 +296,8 @@ with tab3:
                 if not private_df.empty:
                     st.success(f"🔓 已成功并入属于你的私密记录！")
                     show_private = True
-                else:
-                    st.warning("未找到匹配的私密记录。")
 
         display_df = pd.concat([public_df, private_df]).drop_duplicates().reset_index(drop=True) if show_private else public_df
-
         if not display_df.empty:
             st.write("### 🔍 联动数据筛选")
             f_col1, f_col2 = st.columns(2)
@@ -364,33 +305,19 @@ with tab3:
                 filter_device = st.multiselect("筛选清理设备", options=list(display_df["清理设备"].unique()), default=list(display_df["清理设备"].unique()))
             with f_col2:
                 filter_pub = st.multiselect("筛选可见性", options=list(display_df["公开属性"].unique()), default=list(display_df["公开属性"].unique()))
-                
-            filtered_df = display_df[
-                (display_df["清理设备"].isin(filter_device)) & 
-                (display_df["公开属性"].isin(filter_pub))
-            ]
-            
+            filtered_df = display_df[(display_df["清理设备"].isin(filter_device)) & (display_df["公开属性"].isin(filter_pub))]
             show_table = filtered_df.drop(columns=["删除密码", "ID"], errors="ignore").sort_values(by="日期", ascending=False)
             st.dataframe(show_table, use_container_width=True)
-        else:
-            st.info("暂无可见的打卡记录。")
     else:
         st.info("暂无历史记录。")
 
-# ---- Tab 4: 管理记录（④ itertuples 提速 + ⑦ 局部验证刷新） ----
+# ---- Tab 4: 管理记录 ----
 with tab4:
     st.subheader("⚙️ 身份验证与安全管理")
-    st.write("💡 * 请输入您的账号及密码：*")
-    
     col_v1, col_v2 = st.columns(2)
     with col_v1:
         all_users = sorted(list(df["打卡人"].dropna().unique())) if not df.empty else []
-        auth_name = st.selectbox(
-            "您的打卡姓名（支持输入关键字进行搜索）", 
-            options=[""] + all_users, 
-            index=0,
-            help="你可以直接在框内输入名字的部分文字进行模糊定位"
-        )
+        auth_name = st.selectbox("您的打卡姓名（支持输入关键字进行搜索）", options=[""] + all_users, index=0)
     with col_v2:
         auth_pwd = st.text_input("您的安全密码", type="password", placeholder="输入密码以解锁管理面板")
         
@@ -400,11 +327,8 @@ with tab4:
         
         if not my_records.empty:
             st.success(f"🔓 身份验证成功！检测到您名下共有 {len(my_records)} 条可编辑数据。")
-            
             record_map = {}
             options = []
-            
-            # 💡 改用最稳妥的字典列表遍历，100% 通过列名精准取值，绝不踩位置和特殊字符的坑
             for row in my_records.to_dict('records'):
                 label = f"【{row['日期']}】 整理了 {format_storage(row['释放空间(GB)'])} | 内容: {row['整理内容']} [{row['公开属性']}]"
                 record_map[label] = row["ID"]
@@ -414,19 +338,11 @@ with tab4:
             target_id = record_map[selected_label]
             
             if st.button("❌ 确认执行物理删除", type="primary"):
-                # 1. 过滤掉目标 ID 达成删除
                 df = df[df["ID"] != target_id].reset_index(drop=True)
-                
-                # 2. 写入文件并清除 load_data 缓存
                 save_data(df)
-                
-                # 💡 核心修复：手动销毁或重置 session 中的长度锚点，迫使顶部重新跑预计算
                 if "last_data_len" in st.session_state:
                     del st.session_state["last_data_len"]
-                
                 st.success("🎉 数据销毁成功，正在更新视图...")
                 st.rerun()
         else:
             st.error("❌ 身份校验失败：未找到对应的打卡账号，或安全密码不匹配。")
-    else:
-        st.info("🔒 请选择/输入上方凭证以调取属于您的可管辖数据。")
