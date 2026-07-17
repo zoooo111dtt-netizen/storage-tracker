@@ -257,6 +257,7 @@ with tab2:
         fig.update_layout(xaxis_type='category')
         st.plotly_chart(fig, use_container_width=True)
 
+        # 第一行图表：清理设备比例 & 累计释放柱状图
         col1, col2 = st.columns(2)
         with col1:
             device_df = df.groupby("清理设备")["释放空间(GB)"].sum().reset_index()
@@ -269,6 +270,34 @@ with tab2:
             fig_bar = px.bar(people_df, x="释放空间(GB)", y="打卡人", orientation='h', title="成员历史累计释放空间 (GB)",
                              color="打卡人", color_discrete_sequence=px.colors.qualitative.Set3)
             st.plotly_chart(fig_bar, use_container_width=True)
+
+        # 第二行图表：创造空间价值的饼图 & 成员贡献比例
+        col3, col4 = st.columns(2)
+        with col3:
+            # 💰 重新加回来的创造价值饼图
+            value_df = df.copy()
+            value_df["价值"] = value_df["释放空间(GB)"] * STORAGE_VALUE_PER_GB
+            value_grouped = value_df.groupby("打卡人")["价值"].sum().reset_index()
+            fig_val = px.pie(
+                value_grouped,
+                names="打卡人",
+                values="价值",
+                title="成员创造空间价值比例 (元)",
+                color_discrete_sequence=px.colors.qualitative.Bold
+            )
+            st.plotly_chart(fig_val, use_container_width=True)
+
+        with col4:
+            # 成员贡献比例（空间大小）
+            fig_contrib = px.pie(
+                people_df,
+                names="打卡人",
+                values="释放空间(GB)",
+                title="成员空间贡献比例 (GB)",
+                color_discrete_sequence=px.colors.qualitative.Set3
+            )
+            st.plotly_chart(fig_contrib, use_container_width=True)
+            
     else:
         st.info("暂无数据，打卡后即可查看图表看板。")
 
