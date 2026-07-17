@@ -110,9 +110,18 @@ with tab1:
     st.subheader("记录今天的数字整理")
 
     with st.form("checkin"):
-        name = st.text_input("打卡人", placeholder="请输入你的名字/昵称")
-        device = st.selectbox("设备", ["手机", "平板", "电脑", "其他"])
-        size = st.number_input("释放空间(GB)", min_value=0.01, value=1.0, step=0.1)
+        col_name, col_device = st.columns(2)
+        with col_name:
+            name = st.text_input("打卡人", placeholder="请输入你的名字/昵称")
+        with col_device:
+            device = st.selectbox("设备", ["手机", "平板", "电脑", "其他"])
+            
+        col_size, col_unit = st.columns([3, 1])
+        with col_size:
+            size_val = st.number_input("释放空间", min_value=0.01, value=1.0, step=0.1)
+        with col_unit:
+            unit = st.selectbox("单位", ["GB", "MB"])
+            
         types = st.multiselect(
             "整理内容",
             ["📷照片", "🎬视频", "💬聊天缓存", "🗑系统垃圾", "📦APP整理", "📄文件"]
@@ -127,13 +136,16 @@ with tab1:
         if not name.strip() or not pwd.strip():
             st.error("⚠️ 请输入打卡人姓名和密码！")
         else:
+            # 自动换算单位为 GB 存储
+            size_in_gb = size_val if unit == "GB" else size_val / 1024.0
+            
             new_id = str(uuid.uuid4())
             new = pd.DataFrame([{
                 "ID": new_id,
                 "日期": datetime.date.today(),
                 "打卡人": name.strip(),
                 "清理设备": device,
-                "释放空间(GB)": size,
+                "释放空间(GB)": round(size_in_gb, 4),
                 "整理内容": ",".join(types) if types else "常规整理",
                 "断舍离心得": note if note else "数字断舍离，身心舒畅！",
                 "删除密码": pwd_hash(pwd.strip()),
@@ -152,8 +164,9 @@ with tab2:
     st.subheader("📊 数据洞察")
 
     if not df.empty:
+        # 将日期转换为纯 YYYY-MM-DD 字符串格式，彻底规避小时显示
         trend = df.copy()
-        trend["日期显示"] = trend["日期"].astype(str)
+        trend["日期显示"] = trend["日期"].apply(lambda x: x.strftime('%Y-%m-%d') if hasattr(x, 'strftime') else str(x))
         trend_grouped = trend.groupby(["日期显示", "打卡人"])["释放空间(GB)"].sum().reset_index()
 
         fig = px.line(
@@ -164,6 +177,8 @@ with tab2:
             markers=True,
             title="每日释放趋势"
         )
+        # 强制 x 轴刻度作为分类（即纯文本格式展示），不会自动补全时分秒
+        fig.update_xaxes(type='category', title_text="打卡日期")
         st.plotly_chart(fig, use_container_width=True)
 
         col1, col2 = st.columns(2)
@@ -251,7 +266,7 @@ with tab4:
         record_map = {}
         options = []
         for idx, row in df.iterrows():
-            label = f"{row['日期']} | {row['打卡人']} 清理了 {row['释放空间(GB)']}GB [{row['公开属性']}]"
+            label = f"{row['日期']} | {row['打卡人']} 清理了 {row['释放空间(GB)']:.3f}GB [{row['公开属性']}]"
             record_map[label] = row["ID"]
             options.append(label)
 
