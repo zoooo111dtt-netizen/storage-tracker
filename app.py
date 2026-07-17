@@ -20,7 +20,7 @@ STORAGE_VALUE_PER_GB = 0.6
 def pwd_hash(p):
     return hashlib.sha256(p.encode("utf-8")).hexdigest()
 
-# ③ 智能单位换算器
+# 智能单位换算器
 def format_storage(gb):
     if gb < 0.001:
         return "0 MB"
@@ -30,7 +30,7 @@ def format_storage(gb):
         return f"{gb:.2f} GB"
     return f"{gb/1024:.2f} TB"
 
-# ⑤ 勋章与称号配置
+# 勋章与称号配置
 MEDALS = [
     {"limit": 0, "title": "🌱 空间整理新人"},
     {"limit": 1, "title": "🟢 空间整理能手"},
@@ -56,7 +56,8 @@ def get_medal_info(gb):
                 remaining = 0
     return current_title, next_title, remaining
 
-# ① 智能加载与旧数据结构兼容
+# 引入数据加载缓存，大幅提升操作响应速度
+@st.cache_data
 def load_data():
     if os.path.exists(DATA_FILE):
         try:
@@ -95,6 +96,7 @@ def load_data():
 
 def save_data(df):
     df.to_csv(DATA_FILE, index=False, encoding="utf-8-sig")
+    st.cache_data.clear() # 写入数据时立即清空缓存，确保后续读取最新数据
 
 def streak(df, name):
     user_df = df[df["打卡人"] == name]
@@ -129,7 +131,7 @@ st.markdown("""
 st.title("🧹 数字断舍离")
 st.caption("Digital Clean · 每一次整理，都是一次数字空间的诗意释放")
 
-# ③ 首页三个数字自动转换单位
+# 首页三个数字自动转换单位
 total_gb = df["释放空间(GB)"].sum() if not df.empty else 0
 c1, c2, c3 = st.columns(3)
 with c1:
@@ -178,7 +180,6 @@ with tab1:
             df = pd.concat([df, new], ignore_index=True)
             save_data(df)
             
-            # ④ 高级感满满的打卡成功反馈
             current_streak = streak(df, name.strip())
             user_total = df[df["打卡人"] == name.strip()]["释放空间(GB)"].sum()
             
@@ -196,10 +197,8 @@ with tab1:
 # ---- Tab 2: 数据洞察与排行榜 ----
 with tab2:
     if not df.empty:
-        # 📱 数字断舍离排行榜模块
         st.subheader("🏆 数字断舍离大奖赛")
         
-        # 基础周期计算准备
         df_time = df.copy()
         df_time["日期_dt"] = pd.to_datetime(df_time["日期"])
         today = datetime.datetime.now()
@@ -229,7 +228,6 @@ with tab2:
                 
         st.divider()
         
-        # ⑤ 勋章荣誉查询系统
         st.subheader("🏅 玩家成就勋章查询")
         query_name = st.selectbox("选择要查看的玩家", df["打卡人"].unique())
         if query_name:
@@ -247,7 +245,6 @@ with tab2:
                     
         st.divider()
 
-        # 图表展示
         st.subheader("📊 空间趋势与多维图表")
         trend = df.copy()
         trend["日期显示"] = pd.to_datetime(trend["日期"]).dt.strftime('%Y-%m-%d')
@@ -257,7 +254,6 @@ with tab2:
         fig.update_layout(xaxis_type='category')
         st.plotly_chart(fig, use_container_width=True)
 
-        # 第一行图表：清理设备比例 & 每日释放对比柱状图
         col1, col2 = st.columns(2)
         with col1:
             device_df = df.groupby("清理设备")["释放空间(GB)"].sum().reset_index()
@@ -265,13 +261,12 @@ with tab2:
             st.plotly_chart(fig, use_container_width=True)
             
         with col2:
-            # 📊 修改后：每日释放对比柱状图（簇状柱形图，展现每天各成员的较量）
             fig_bar = px.bar(
                 trend_grouped, 
                 x="日期显示", 
                 y="释放空间(GB)", 
                 color="打卡人", 
-                barmode="group", # 柱子并排显示
+                barmode="group",
                 title="每日释放空间对比柱状图 (GB)",
                 color_discrete_sequence=px.colors.qualitative.Set3,
                 labels={"日期显示": "打卡日期", "释放空间(GB)": "释放空间 (GB)"}
@@ -279,10 +274,8 @@ with tab2:
             fig_bar.update_layout(xaxis_type='category')
             st.plotly_chart(fig_bar, use_container_width=True)
 
-        # 第二行图表：创造空间价值的饼图 & 成员贡献比例
         col3, col4 = st.columns(2)
         with col3:
-            # 💰 创造价值饼图
             value_df = df.copy()
             value_df["价值"] = value_df["释放空间(GB)"] * STORAGE_VALUE_PER_GB
             value_grouped = value_df.groupby("打卡人")["价值"].sum().reset_index()
@@ -296,7 +289,6 @@ with tab2:
             st.plotly_chart(fig_val, use_container_width=True)
 
         with col4:
-            # 成员贡献比例（空间大小）
             people_df = df.groupby("打卡人")["释放空间(GB)"].sum().reset_index()
             fig_contrib = px.pie(
                 people_df,
@@ -310,7 +302,7 @@ with tab2:
     else:
         st.info("暂无数据，打卡后即可查看图表看板。")
 
-# ---- Tab 3: 历史记录（包含多维筛选） ----
+# ---- Tab 3: 历史记录 ----
 with tab3:
     st.subheader("📋 历史记录明细")
     if not df.empty:
@@ -332,7 +324,6 @@ with tab3:
         display_df = pd.concat([public_df, private_df]).drop_duplicates().reset_index(drop=True) if show_private else public_df
 
         if not display_df.empty:
-            # ⑥ 历史记录的高级过滤器筛选
             st.write("### 🔍 联动数据筛选")
             f_col1, f_col2 = st.columns(2)
             with f_col1:
@@ -340,7 +331,6 @@ with tab3:
             with f_col2:
                 filter_pub = st.multiselect("筛选可见性", options=list(display_df["公开属性"].unique()), default=list(display_df["公开属性"].unique()))
                 
-            # 执行过滤
             filtered_df = display_df[
                 (display_df["清理设备"].isin(filter_device)) & 
                 (display_df["公开属性"].isin(filter_pub))
@@ -353,15 +343,21 @@ with tab3:
     else:
         st.info("暂无历史记录。")
 
-# ---- Tab 4: 管理记录（完全盲删防护机制） ----
+# ---- Tab 4: 管理记录（优化：支持输入模糊搜索姓名 + 极速响应机制） ----
 with tab4:
     st.subheader("⚙️ 身份验证与安全管理")
     st.write("💡 *为了全员隐私安全，系统不会默认列出历史打卡，请输入您的账号进行双因子匹配：*")
     
-    # ② 输入名字和密码
     col_v1, col_v2 = st.columns(2)
     with col_v1:
-        auth_name = st.text_input("您的打卡姓名", placeholder="确认要管理谁的记录")
+        # 获取 CSV 中所有打卡人并去重，提供一个可选、可直接键盘输入模糊匹配的下拉输入框
+        all_users = sorted(list(df["打卡人"].dropna().unique())) if not df.empty else []
+        auth_name = st.selectbox(
+            "您的打卡姓名（支持输入关键字进行搜索）", 
+            options=[""] + all_users, 
+            index=0,
+            help="你可以直接在框内输入名字的部分文字进行模糊定位"
+        )
     with col_v2:
         auth_pwd = st.text_input("您的安全密码", type="password", placeholder="输入密码以解锁管理面板")
         
@@ -373,7 +369,6 @@ with tab4:
         if not my_records.empty:
             st.success(f"🔓 身份验证成功！检测到您名下共有 {len(my_records)} 条可编辑数据。")
             
-            # 将 ID 包装成人类可读的选择框
             record_map = {}
             options = []
             for idx, row in my_records.iterrows():
@@ -392,4 +387,4 @@ with tab4:
         else:
             st.error("❌ 身份校验失败：未找到对应的打卡账号，或安全密码不匹配。")
     else:
-        st.info("🔒 请完整填写上方凭证以调取属于您的可管辖数据。")
+        st.info("🔒 请选择/输入上方凭证以调取属于您的可管辖数据。")
