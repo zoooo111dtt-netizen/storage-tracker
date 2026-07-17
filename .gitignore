@@ -1,0 +1,12 @@
+# Python缓存
+__pycache__/
+*.pyc
+
+# Streamlit缓存
+.streamlit/
+
+# 私人数据
+digital_clean_data.csv
+
+# 临时文件
+*.log
