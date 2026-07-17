@@ -2,33 +2,35 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import hashlib
 import os
+import hashlib
 import plotly.express as px
 
 st.set_page_config(
     page_title="🧹 数字断舍离 - Digital Clean",
     page_icon="🧹",
-    layout="centered"
+    layout="wide"
 )
 
 DATA_FILE = "digital_clean_data.csv"
 STORAGE_VALUE_PER_GB = 0.6
 
 
-def encrypt_password(p):
+def pwd_hash(p):
     return hashlib.sha256(p.encode("utf-8")).hexdigest()
 
 
 def load_data():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
-        if not df.empty:
+        if "日期" in df:
             df["日期"] = pd.to_datetime(df["日期"]).dt.date
         return df
+
     return pd.DataFrame(columns=[
-        "日期", "打卡人", "清理设备", "释放空间(GB)",
-        "整理内容", "断舍离心得", "删除密码", "公开属性"
+        "ID", "日期", "打卡人", "清理设备",
+        "释放空间(GB)", "整理内容",
+        "断舍离心得", "删除密码", "公开属性"
     ])
 
 
@@ -49,121 +51,166 @@ def streak(df, name):
     return s
 
 
-def badges(gb, days):
-    result = []
-    if gb >= 1:
-        result.append("🌱 数字整理新手")
-    if gb >= 20:
-        result.append("🎖 缓存清理专家")
-    if gb >= 100:
-        result.append("🏆 数字极简主义者")
-    if days >= 7:
-        result.append("🔥 连续整理达人")
-    if days >= 30:
-        result.append("👑 断舍离大师")
-    return result or ["✨ 初次整理"]
-
+df = load_data()
 
 st.markdown("""
 <style>
-.main {
-    background:#fafafa;
+.card{
+padding:25px;
+border-radius:20px;
+background:#ffffff;
+box-shadow:0 4px 15px rgba(0,0,0,0.08);
+text-align:center;
 }
-.card {
-    padding:20px;
-    border-radius:20px;
-    background:white;
-    box-shadow:0 4px 16px rgba(0,0,0,.08);
-    text-align:center;
-}
-.big {
-    font-size:38px;
-    font-weight:700;
+.big{
+font-size:38px;
+font-weight:bold;
 }
 </style>
 """, unsafe_allow_html=True)
 
-df = load_data()
 
 st.title("🧹 数字断舍离")
-st.caption("Digital Clean · 记录每一次数字空间整理")
+st.caption("Digital Clean · 每一次整理，都是一次数字空间释放")
 
-if not df.empty:
-    total = df["释放空间(GB)"].sum()
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(
-            f'<div class="card"><div>💾累计释放</div><div class="big">{total:.2f} GB</div></div>',
-            unsafe_allow_html=True)
-    with c2:
-        st.markdown(
-            f'<div class="card"><div>价值估算</div><div class="big">¥{total*STORAGE_VALUE_PER_GB:.2f}</div></div>',
-            unsafe_allow_html=True)
 
-st.divider()
+total = df["释放空间(GB)"].sum() if not df.empty else 0
 
-tab1, tab2, tab3 = st.tabs(["🧹 今日整理", "🏆 我的成长", "📊 数据统计"])
+c1,c2,c3 = st.columns(3)
+with c1:
+    st.markdown(f'<div class="card"><div>💾累计释放</div><div class="big">{total:.2f} GB</div></div>', unsafe_allow_html=True)
+with c2:
+    st.markdown(f'<div class="card"><div>💰空间价值</div><div class="big">¥{total*STORAGE_VALUE_PER_GB:.2f}</div></div>', unsafe_allow_html=True)
+with c3:
+    people = df["打卡人"].nunique() if not df.empty else 0
+    st.markdown(f'<div class="card"><div>👥参与人数</div><div class="big">{people}</div></div>', unsafe_allow_html=True)
+
+
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["🧹 今日断舍离", "📊 数据洞察", "📋 历史记录", "⚙️ 管理记录"]
+)
+
 
 with tab1:
-    with st.form("clean"):
-        name = st.text_input("昵称")
-        device = st.selectbox("设备", ["手机", "平板", "电脑", "其他"])
+    st.subheader("记录今天的数字整理")
+
+    with st.form("checkin"):
+        name = st.text_input("打卡人")
+        device = st.selectbox("设备", ["手机","平板","电脑","其他"])
         size = st.number_input("释放空间(GB)", min_value=0.01, value=1.0)
-        content = st.multiselect(
+        types = st.multiselect(
             "整理内容",
-            ["📷 照片", "🎬 视频", "💬 聊天缓存", "🗑 系统垃圾", "📦 APP", "📄 文件"]
+            ["📷照片","🎬视频","💬聊天缓存","🗑系统垃圾","📦APP整理","📄文件"]
         )
-        note = st.text_area("今日心得")
+        note = st.text_area("断舍离心得")
         pwd = st.text_input("删除密码", type="password")
-        public = st.radio("可见性", ["公开", "私密"])
+        public = st.radio("可见性", ["公开","私密"])
+
         submit = st.form_submit_button("完成断舍离")
 
     if submit:
         if name and pwd:
+            import uuid
             new = pd.DataFrame([{
+                "ID": str(uuid.uuid4()),
                 "日期": datetime.date.today(),
                 "打卡人": name,
                 "清理设备": device,
                 "释放空间(GB)": size,
-                "整理内容": ",".join(content),
+                "整理内容": ",".join(types),
                 "断舍离心得": note,
-                "删除密码": encrypt_password(pwd),
+                "删除密码": pwd_hash(pwd),
                 "公开属性": public
             }])
-            df = pd.concat([df, new], ignore_index=True)
+            df = pd.concat([df,new],ignore_index=True)
             save_data(df)
-            st.success("🧹 断舍离完成！")
+            st.success("🧹 数字断舍离完成")
             st.rerun()
 
-with tab2:
-    if not df.empty:
-        for n, g in df.groupby("打卡人"):
-            total = g["释放空间(GB)"].sum()
-            d = streak(df, n)
-            st.subheader(n)
-            st.write(f"累计释放：{total:.2f}GB")
-            st.write(f"连续整理：🔥 {d}天")
-            st.write("获得徽章：")
-            st.write(" ".join(badges(total, d)))
-    else:
-        st.info("还没有记录")
 
-with tab3:
+with tab2:
+    st.subheader("📊 数据洞察")
+
     if not df.empty:
-        chart = px.line(
-            df.sort_values("日期"),
-            x="日期",
+        trend = df.groupby(["日期","打卡人"])["释放空间(GB)"].sum().reset_index()
+        trend["日期显示"] = trend["日期"].astype(str)
+
+        fig = px.line(
+            trend,
+            x="日期显示",
             y="释放空间(GB)",
             color="打卡人",
-            markers=True
+            markers=True,
+            title="每日释放趋势"
         )
-        st.plotly_chart(chart, use_container_width=True)
+        st.plotly_chart(fig,use_container_width=True)
 
-        pie = px.pie(
-            df,
-            names="清理设备",
-            values="释放空间(GB)"
+        col1,col2 = st.columns(2)
+
+        with col1:
+            device = df.groupby("清理设备")["释放空间(GB)"].sum().reset_index()
+            fig = px.pie(
+                device,
+                names="清理设备",
+                values="释放空间(GB)",
+                title="设备整理比例",
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            st.plotly_chart(fig,use_container_width=True)
+
+        with col2:
+            people = df.groupby("打卡人")["释放空间(GB)"].sum().reset_index()
+            fig = px.pie(
+                people,
+                names="打卡人",
+                values="释放空间(GB)",
+                title="成员贡献比例",
+                color_discrete_sequence=px.colors.qualitative.Set3
+            )
+            st.plotly_chart(fig,use_container_width=True)
+
+        value = df.copy()
+        value["价值"] = value["释放空间(GB)"]*STORAGE_VALUE_PER_GB
+        value=value.groupby("打卡人")["价值"].sum().reset_index()
+
+        fig=px.pie(
+            value,
+            names="打卡人",
+            values="价值",
+            title="成员价值贡献比例",
+            color_discrete_sequence=px.colors.qualitative.Bold
         )
-        st.plotly_chart(pie, use_container_width=True)
+        st.plotly_chart(fig,use_container_width=True)
 
-st.caption("Digital Clean · Small cleanup, big difference.")
+
+with tab3:
+    st.subheader("📋 历史记录")
+    if not df.empty:
+        show=df[df["公开属性"]=="公开"].drop(columns=["删除密码"])
+        st.dataframe(show,use_container_width=True)
+
+
+with tab4:
+    st.subheader("⚙️ 删除记录")
+
+    if not df.empty:
+        rid=st.selectbox(
+            "选择记录",
+            df["ID"]
+        )
+
+        pwd=st.text_input("输入密码",type="password")
+
+        if st.button("删除"):
+            index=df[
+                (df["ID"]==rid) &
+                (df["删除密码"]==pwd_hash(pwd))
+            ].index
+
+            if len(index):
+                df=df.drop(index)
+                save_data(df)
+                st.success("删除成功")
+                st.rerun()
+            else:
+                st.error("密码错误")
