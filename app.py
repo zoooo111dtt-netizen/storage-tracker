@@ -404,8 +404,10 @@ with tab4:
             record_map = {}
             options = []
             # ④ 改用高效的 itertuples 循环处理下拉菜单，极速生成
+            # ④ 改用稳妥的位置索引访问 itertuples，防止部分 Pandas 版本字段名下划线转义失败
             for row in my_records.itertuples(index=False):
-                label = f"【{row.日期}】 整理了 {format_storage(row._4)} | 内容: {row.整理内容} [{row.公开属性}]"
+                # row[4] 对应的是第5列，即 "释放空间(GB)"
+                label = f"【{row.日期}】 整理了 {format_storage(row[4])} | 内容: {row.整理内容} [{row.公开属性}]"
                 record_map[label] = row.ID
                 options.append(label)
                 
