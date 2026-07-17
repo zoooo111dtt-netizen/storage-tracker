@@ -32,7 +32,7 @@ def format_storage(gb):
 
 # 勋章与称号配置
 MEDALS = [
-    {"limit": 0, "title": "🌱 数字空间探索者"},
+    {"limit": 0, "title": "🌱 数字空间探索者"},
     {"limit": 1, "title": "🟢 空间整理进阶者"},
     {"limit": 10, "title": "🔵 缓存清理领导者"},
     {"limit": 30, "title": "🟣 数字秩序维护者"},
